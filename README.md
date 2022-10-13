@@ -28,9 +28,16 @@ pip install -r requirements.txt
 
 The `dataset_generation.py` file generates the images for both the enrollment and authentication phases with the provided
 reference images (__dataset/reference_images__).
+```shell
+python3 dataset_generation.py
+```
 
 ## main.py
 
 Variables and functions are defined for running both phases: enrollment and authentication. The code can be run in parallel by changing the number of cores (`N_CORES`).
 
 By default, the algorithm runs the _case1_ and can be changed in the variable `case = ' case2'`.
+
+```shell
+python3 main.py
+```
