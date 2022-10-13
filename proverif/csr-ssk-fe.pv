@@ -1,0 +1,131 @@
+(*channels*)
+free ch: channel.
+
+(*types*)
+type sskey.
+type pskey.
+type embFeature.
+type id.
+
+free accept, reject: bitstring.
+
+table enrolTable(id, bitstring, pskey).
+
+event enrolRequested(id, bitstring, pskey).
+event enrolVerified(id, bitstring, pskey).
+event authVerified(bitstring, bitstring).
+event authRequested(bitstring, bitstring).
+event resultSent(bitstring, bitstring, bitstring).
+event resultVerified(bitstring, bitstring, bitstring).
+
+query csrID:id, P:bitstring, psk:pskey; inj-event(enrolVerified(csrID, P, psk))==>inj-event(enrolRequested(csrID, P, psk)).
+query ssk: sskey, nAD:bitstring, nAS:bitstring; inj-event(authVerified(nAD, nAS))==>inj-event(authRequested(nAD, nAS)).
+query res: bitstring, nAD:bitstring, nAS:bitstring; inj-event(resultVerified(res, nAD, nAS))==>inj-event(resultSent(res, nAD, nAS)).
+query secret w.
+query secret csrAD.
+query secret ssk.
+query secret R.
+
+(*functions*)
+fun pk(sskey) : pskey.
+fun sign(bitstring, sskey) : bitstring.
+fun imgProcess(bitstring) : embFeature.
+fun genR(embFeature) : bitstring.
+fun genP(embFeature) : bitstring.
+fun signKeyGenS(bitstring) : sskey.
+reduc forall m:bitstring, ssk:sskey; checksign(sign(m,ssk), pk(ssk)) = m.
+reduc forall w:embFeature; rep(w, (genP(w))) = genR(w).
+
+(*----------Service Provider Process-------------*)
+let SP (pch:channel, csrID:id, csrS:bitstring) =
+    (*Enrollment Request*)
+    out(pch, (csrID, csrS)).
+
+(*--------------Auth Device Process--------------*)
+let AD (pch:channel, ADskey:sskey, ASpkey: pskey) =
+
+    (*Enrollment Phase*)
+    in(pch, x:bitstring);
+    let (csrID:id, csrAD:bitstring) = x in
+    let w = imgProcess(csrAD) in
+    let R = genR(w) in 
+    let P = genP(w) in
+    let ssk = signKeyGenS(R) in
+    let psk = pk(ssk) in
+    let signature = sign((csrID, P, psk), ADskey) in
+    event enrolRequested(csrID, P, psk);
+    out(ch, (csrID, P, psk, signature));
+
+    (*Authentication Phase*)
+    phase 1;
+    in(pch, (csrID':id, csr':bitstring));
+    out(ch, csrID');
+    in(ch, (P':bitstring, nAS:bitstring));
+    let w' = imgProcess(csr') in
+    let R' = rep(w',P') in
+    let ssk' = signKeyGenS(R') in
+    new nAD:bitstring;
+    let sigma = sign((nAD, nAS), ssk') in
+    event authRequested(nAD, nAS);
+    out(ch, (sigma, nAD));
+    in(ch, (signedResult:bitstring, result:bitstring));
+    if (result, nAD, nAS) = checksign(signedResult, ASpkey) then
+    (
+        event resultVerified(result, nAD, nAS);
+        out(pch, result)
+    )
+    else
+    (
+        out(pch, reject)
+    ).
+
+(*---------------Auth Server Process-------------*)
+let AS (ASskey:sskey, ADpkey:pskey) =
+
+    (*Enrollment Phase*)
+    in(ch, (csrID:id, P:bitstring, psk:pskey, signature:bitstring));
+    if (csrID, P, psk) = checksign(signature, ADpkey) then
+    event enrolVerified(csrID, P, psk);
+    insert enrolTable(csrID, P, psk);
+
+    (*Authentication Phase*)
+    phase 1;
+    in(ch, csrID':id);
+    get enrolTable(=csrID', P', psk') in
+    new nAS:bitstring;
+    out(ch, (P', nAS));
+    in(ch, (sigma:bitstring, nAD:bitstring));
+    let (=nAD, =nAS) = checksign(sigma, psk') in 
+    (
+        event authVerified(nAD, nAS);
+        let signedResult = sign((accept, nAD, nAS), ASskey) in
+        event resultSent(accept, nAD, nAS);
+        out(ch, (signedResult, accept))
+    )
+    else
+    (
+        let signedResult = sign((reject, nAD, nAS), ASskey) in
+        event resultSent(reject, nAD, nAS);
+        out(ch, (signedResult, reject))
+    ).
+(*-----------------User Process------------------*)
+let User (pch:channel, csrID:id, csrU:bitstring) =
+    (*Authentication Request*)
+    phase 1;
+    out(pch, (csrID, csrU));
+    in(pch, authResult:bitstring).
+
+(*---------------------Main----------------------*)
+process
+
+new pch:channel;
+new ADskey: sskey;
+let ADpkey = pk(ADskey) in out(ch, ADpkey);
+new ASskey: sskey;
+let ASpkey = pk(ASskey) in out(ch, ASpkey);
+
+(*same csrID for enrollment and authentication*)
+!(new csrID:id; new csr:bitstring; SP(pch, csrID, csr) | User(pch, csrID, csr))
+| (!AD(pch, ADskey, ASpkey)) 
+| AS(ASskey, ADpkey)
+ 
