@@ -1,10 +1,12 @@
 # Dataset 
-This folder contains the reference images for the dataset creation.
+This folder contains the reference images for the dataset generation.
 
 
 
 # Proverif code
-
+```shell
+./proverif $YOUR_PATH/proverif/csr-ssk-fe.pv
+```
 
 
 # Python code
@@ -30,7 +32,7 @@ The `dataset_generation.py` file generates the images for both the enrollment an
 To run Python scripts, you need to open a command-line window and type `python3` followed by the script's path:
 
 ```shell
-python3 $YOUR_PATH/dataset_generation.py
+python3 $YOUR_PATH/python/dataset_generation.py
 ```
 
 ## main.py
@@ -40,5 +42,5 @@ Variables and functions are defined for running both phases: enrollment and auth
 By default, the algorithm runs the _case1_ and can be changed in the variable `case = ' case2'`.
 
 ```shell
-python3 $YOUR_PATH/main.py
+python3 $YOUR_PATH/python/main.py
 ```
